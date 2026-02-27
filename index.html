@@ -433,7 +433,10 @@ async function loadProgress(user,tEl,bEl,cId,tbEl){
 
   let th='';
   EX.forEach(ex=>{
-    th+='<button class="tab-btn'+(currentExTab===ex.id?' sel':'')+'" onclick="currentExTab=\''+ex.id+'\';loadProgress('+(isProf?"'"+uname+"',$('"+tabs.id+"'),$('"+badge.id+"'),\'"+canvasId+"\',$('"+table.id+"')":'')+')">'+ex.emoji+' '+ex.name+'</button>';
+    const clickFn=isProf
+      ?"currentExTab='"+ex.id+"';loadProfView()"
+      :"currentExTab='"+ex.id+"';loadProgress()";
+    th+='<button class="tab-btn'+(currentExTab===ex.id?' sel':'')+'" onclick="'+clickFn+'">'+ex.emoji+' '+ex.name+'</button>';
   });
   tabs.innerHTML=th;
 
@@ -573,12 +576,15 @@ async function renderStudents(list){
   $('stuList').innerHTML=h;
 }
 
+let viewingStu=null;
 function viewStudent(uname){
+  viewingStu=uname;
   currentExTab='lagartijas';
   $('psStuName').textContent=uname.split('@')[0];
   showScreen('scrProfStu');
-  loadProgress(uname,$('psTabs'),$('psBadge'),'chart2',$('psTable'));
+  loadProfView();
 }
+function loadProfView(){loadProgress(viewingStu,$('psTabs'),$('psBadge'),'chart2',$('psTable'))}
 
 async function showProfProfile(){
   showScreen('scrProfProfile');
@@ -596,3 +602,4 @@ sb.auth.onAuthStateChange((event,session)=>{
 </script>
 </body>
 </html>
+
