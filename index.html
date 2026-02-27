@@ -177,6 +177,10 @@ Continuar con Google
 <div class="form-group" id="codeWrap" style="display:none;margin-top:8px">
 <label>CÓDIGO PROFESOR</label><input id="regCode" placeholder="Ingresa el código" autocomplete="off">
 </div>
+<div id="profSelectWrap" style="display:none;margin-top:8px;width:100%;max-width:300px">
+<div style="font-size:10px;font-weight:700;color:var(--tx3);letter-spacing:1px;margin-bottom:6px">ELIGE TU PROFESOR</div>
+<div id="profList"></div>
+</div>
 <div class="error" id="roleErr" style="margin-top:8px"></div>
 <button class="btn btn-primary" style="margin-top:12px" onclick="confirmRole()">Continuar</button>
 </div></div>
@@ -220,8 +224,19 @@ Continuar con Google
 <div class="screen" id="scrAlumProfile">
 <div class="topbar"><h1>Perfil</h1></div>
 <div class="prof-hdr"><div class="prof-ava-big" id="apAva"></div><div class="prof-name" id="apName"></div><div class="prof-email" id="apEmail"></div><div class="prof-role" id="apRole"></div></div>
+<div class="section-title">MIS DATOS</div>
+<div class="card">
+<div class="form-group" style="margin-bottom:10px;max-width:100%"><label>NOMBRE</label><input id="profNombre" placeholder="Tu nombre completo"></div>
+<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px">
+<div class="form-group" style="max-width:100%"><label>EDAD</label><input id="profEdad" type="number" inputmode="numeric" placeholder="Años"></div>
+<div class="form-group" style="max-width:100%"><label>PESO (KG)</label><input id="profPeso" type="number" inputmode="decimal" placeholder="Kg"></div>
+<div class="form-group" style="max-width:100%"><label>ESTATURA (CM)</label><input id="profEstatura" type="number" inputmode="numeric" placeholder="Cm"></div>
+</div>
+<button class="btn btn-primary btn-sm" style="margin-top:10px;width:100%" onclick="saveProfile()">Guardar Datos ✓</button>
+</div>
+<div class="section-title">ESTADÍSTICAS</div>
 <div class="stat-grid" id="apStats"></div>
-<button class="btn btn-outline" style="margin-top:8px" onclick="doLogout()">Cerrar Sesión</button>
+<button class="btn btn-outline" style="margin-top:16px" onclick="doLogout()">Cerrar Sesión</button>
 </div>
 
 <!-- PROFESOR HOME -->
@@ -278,6 +293,7 @@ let selectedEx=null;
 let currentExTab='lagartijas';
 let allStudents=[];
 let selectedRole=null;
+let selectedProfesor=null;
 
 const $=id=>document.getElementById(id);
 function showScreen(id){document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));$(id).classList.add('active');$(id).scrollTop=0}
@@ -314,7 +330,7 @@ async function checkSession(){
   // Check if user exists in our users table
   const{data:existing}=await sb.from('users').select('*').eq('username',email).single();
   if(existing){
-    currentUser={email,name,avatar,role:existing.role,username:email};
+    currentUser={email,name,avatar,role:existing.role,username:email,professor_id:existing.professor_id||null,nombre:existing.nombre||'',edad:existing.edad||'',peso:existing.peso||'',estatura:existing.estatura||''};
     afterLogin();
   }else{
     // First time — ask for role
@@ -329,15 +345,41 @@ function pickRole(role){
   document.querySelectorAll('.role-card').forEach(c=>c.classList.remove('sel'));
   $('role'+role.charAt(0).toUpperCase()+role.slice(1)).classList.add('sel');
   $('codeWrap').style.display=role==='profesor'?'block':'none';
+  $('profSelectWrap').style.display=role==='alumno'?'block':'none';
+  if(role==='alumno') loadProfesores();
+}
+
+async function loadProfesores(){
+  const wrap=$('profList');
+  wrap.innerHTML='<div style="color:var(--tx3);font-size:12px">Cargando...</div>';
+  const{data}=await sb.from('users').select('username').eq('role','profesor');
+  if(!data||data.length===0){wrap.innerHTML='<div style="color:var(--tx3);font-size:12px">No hay profesores registrados</div>';return;}
+  wrap.innerHTML='';
+  selectedProfesor=null;
+  data.forEach(p=>{
+    const card=document.createElement('div');
+    card.style.cssText='padding:10px 14px;margin-bottom:6px;border-radius:12px;border:2px solid var(--brd);cursor:pointer;font-size:14px;font-weight:600;color:var(--tx);transition:all .2s';
+    card.textContent=p.username;
+    card.onclick=()=>{
+      wrap.querySelectorAll('div').forEach(d=>{d.style.borderColor='var(--brd)';d.style.background='transparent'});
+      card.style.borderColor='var(--accent)';card.style.background='rgba(99,102,241,.1)';
+      selectedProfesor=p.username;
+    };
+    wrap.appendChild(card);
+  });
 }
 
 async function confirmRole(){
   if(!selectedRole)return $('roleErr').textContent='Selecciona un rol';
   if(selectedRole==='profesor'&&$('regCode').value!==COACH_CODE)return $('roleErr').textContent='Código incorrecto';
+  if(selectedRole==='alumno'&&!selectedProfesor)return $('roleErr').textContent='Elige un profesor';
   $('roleErr').textContent='';
-  const{error}=await sb.from('users').insert({username:currentUser.email,pin:'google',role:selectedRole});
+  const row={username:currentUser.email,pin:'google',role:selectedRole};
+  if(selectedRole==='alumno') row.professor_id=selectedProfesor;
+  const{error}=await sb.from('users').insert(row);
   if(error)return $('roleErr').textContent='Error: '+error.message;
   currentUser.role=selectedRole;
+  if(selectedRole==='alumno') currentUser.professor_id=selectedProfesor;
   toast('¡Cuenta creada!');
   afterLogin();
 }
@@ -541,6 +583,11 @@ async function loadAlumProfile(){
   $('apName').textContent=currentUser.name;
   $('apEmail').textContent=currentUser.email;
   $('apRole').textContent='ALUMNO';
+  // Load profile fields
+  $('profNombre').value=currentUser.nombre||'';
+  $('profEdad').value=currentUser.edad||'';
+  $('profPeso').value=currentUser.peso||'';
+  $('profEstatura').value=currentUser.estatura||'';
   const{data:recs}=await sb.from('records').select('*').eq('username',currentUser.username);
   const records=recs||[];
   let h='<div class="stat-card"><div class="stat-val">'+records.length+'</div><div class="stat-lbl">REGISTROS</div></div>';
@@ -553,9 +600,20 @@ async function loadAlumProfile(){
   $('apStats').innerHTML=h;
 }
 
+async function saveProfile(){
+  const nombre=$('profNombre').value.trim();
+  const edad=parseInt($('profEdad').value)||null;
+  const peso=parseFloat($('profPeso').value)||null;
+  const estatura=parseInt($('profEstatura').value)||null;
+  const{error}=await sb.from('users').update({nombre,edad,peso,estatura}).eq('username',currentUser.email);
+  if(error){toast('Error al guardar');return;}
+  currentUser.nombre=nombre;currentUser.edad=edad;currentUser.peso=peso;currentUser.estatura=estatura;
+  toast('Datos guardados ✓');
+}
+
 // ===== PROFESOR =====
 async function loadStudents(){
-  const{data}=await sb.from('users').select('*').eq('role','alumno').order('username');
+  const{data}=await sb.from('users').select('*').eq('role','alumno').eq('professor_id',currentUser.email).order('username');
   allStudents=data||[];
   renderStudents(allStudents);
 }
@@ -570,8 +628,10 @@ async function renderStudents(list){
     const last=sR[0];
     const ex=last?EX.find(e=>e.id===last.exercise):null;
     const meta=last?(ex?ex.emoji+' ':'')+last.reps+' reps · '+fmtDate(last.date):'Sin registros';
-    const initial=s.username.includes('@')?s.username[0].toUpperCase():s.username[0].toUpperCase();
-    h+='<div class="stu-card" onclick="viewStudent(\''+s.username+'\')"><div class="stu-ava">'+initial+'</div><div class="stu-info"><div class="stu-name">'+s.username.split('@')[0]+'</div><div class="stu-meta">'+meta+'</div></div><span style="color:var(--tx3)">›</span></div>';
+    const initial=s.nombre?s.nombre[0].toUpperCase():s.username.includes('@')?s.username[0].toUpperCase():s.username[0].toUpperCase();
+    const displayName=s.nombre||s.username.split('@')[0];
+    const metaExtra=s.edad?(' · '+s.edad+' años'):'';
+    h+='<div class="stu-card" onclick="viewStudent(\''+s.username+'\')"><div class="stu-ava">'+initial+'</div><div class="stu-info"><div class="stu-name">'+displayName+'</div><div class="stu-meta">'+meta+metaExtra+'</div></div><span style="color:var(--tx3)">›</span></div>';
   });
   $('stuList').innerHTML=h;
 }
@@ -602,4 +662,5 @@ sb.auth.onAuthStateChange((event,session)=>{
 </script>
 </body>
 </html>
+
 
